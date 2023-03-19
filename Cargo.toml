@@ -9,6 +9,7 @@ edition = "2021"
 async-trait = "0.1.66"
 axum = "0.6.11"
 const_format = "0.2.30"
+lazy_static = "1.4.0"
 opentelemetry = { version = "0.18.0", features = ["metrics", "rt-tokio"] }
 opentelemetry-otlp = { version = "0.11.0", features = ["grpc-tonic", "metrics", "reqwest-client"] }
 opentelemetry-http = "0.7.0"

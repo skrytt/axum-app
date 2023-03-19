@@ -1,6 +1,4 @@
 use crate::APP_NAME;
-use crate::state::AppState;
-
 use axum::{
   extract::State,
   http::Request,
@@ -13,11 +11,38 @@ use opentelemetry::sdk::{
     trace::{self, RandomIdGenerator, Sampler},
     Resource,
 };
-use opentelemetry::{Context, metrics, runtime, trace::TraceError, KeyValue};
+use opentelemetry::{Context, global, metrics, runtime, trace::TraceError, KeyValue};
 use opentelemetry_otlp::WithExportConfig;
 use std::time::Duration;
 use tracing_subscriber::{layer::SubscriberExt, util::SubscriberInitExt};
 
+use std::sync::{Arc, Mutex};
+
+lazy_static! {
+    static ref METRICS_STATE: Arc<Mutex<AppState>> = Arc::new(Mutex::new(AppState::new()));
+}
+
+
+#[derive(Clone)]
+pub struct AppState {
+    pub request_counter: metrics::Counter<u64>,
+    pub response_counter: metrics::Counter<u64>,
+}
+
+impl AppState {
+    pub fn new() -> Self {
+        let _tracer = global::tracer(APP_NAME);
+        let meter = global::meter(APP_NAME);
+
+        let request_counter = meter.u64_counter("requests").init();
+        let response_counter = meter.u64_counter("responses").init();
+
+        Self {
+            request_counter,
+            response_counter,
+        }
+    }
+}
 const OTLP_GRPC_COLLECTOR_ENDPOINT: &str = "http://127.0.0.1:4317/";
 
 pub fn init_tracer() -> Result<(), TraceError> {
@@ -71,7 +96,6 @@ pub fn init_metrics() -> metrics::Result<BasicController> {
 }
 
 pub async fn metrics_middleware<B>(
-    State(mut state): State<AppState>,
     request: Request<B>,
     next: Next<B>,
 ) -> Response {
@@ -82,7 +106,7 @@ pub async fn metrics_middleware<B>(
 
   // Request metrics
   // TODO don't create a new context for every request
-  state.lock().request_counter.add(
+  METRICS_STATE.lock().unwrap().request_counter.add(
     &context,
     1,
     &[
@@ -94,7 +118,7 @@ pub async fn metrics_middleware<B>(
   let response = next.run(request).await;
 
   // Response metrics
-  state.lock().response_counter.add(
+  METRICS_STATE.lock().unwrap().response_counter.add(
     &context,
     1,
     &[

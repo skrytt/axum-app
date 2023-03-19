@@ -6,10 +6,11 @@
 /// You can then configure the OpenTelemetry collector to send those onwards wherever
 /// you need (the OpenTelemetry configuration is out of scope of what's in this repo).
 
-mod state;
+#[macro_use]
+extern crate lazy_static;
+
 mod telemetry;
 
-use state::AppState;
 use telemetry::{init_metrics, init_tracer, metrics_middleware};
 
 use axum::{
@@ -43,8 +44,6 @@ async fn main() -> Result<(), Box<dyn Error + Send + Sync + 'static>> {
 
   let _metrics_controller = init_metrics()?;
   let _meter = global::meter(APP_NAME);
-
-  let state = AppState::new();
 
   let app = Router::new()
     .route("/", get(handler))
@@ -84,7 +83,7 @@ async fn main() -> Result<(), Box<dyn Error + Send + Sync + 'static>> {
                 },
             )
         )
-        .layer(middleware::from_fn_with_state(state.clone(), metrics_middleware))
+        .layer(middleware::from_fn(metrics_middleware))
     );
 
   let addr = SocketAddr::from(([127, 0, 0, 1], 3000));
