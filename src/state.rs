@@ -1,13 +1,12 @@
 use crate::APP_NAME;
 
-use opentelemetry::{
-    global,
-    metrics::{Counter, Meter},
-};
+use opentelemetry::{global, metrics::Counter};
 use std::sync::{Arc, Mutex, MutexGuard};
 
 #[derive(Clone)]
 pub struct AppState {
+    // TODO: find a more performant solution than Mutexes for
+    // thread-safe incrementing of metrics.
     inner: Arc<Mutex<AppStateInner>>,
 }
 
@@ -24,23 +23,21 @@ impl AppState {
 }
 
 pub struct AppStateInner {
-    tracer: opentelemetry::global::BoxedTracer,
-    meter: Meter,
-
     pub request_counter: Counter<u64>,
+    pub response_counter: Counter<u64>,
 }
 
 impl AppStateInner {
     pub fn new() -> Self {
-        let tracer = global::tracer(APP_NAME);
+        let _tracer = global::tracer(APP_NAME);
         let meter = global::meter(APP_NAME);
 
         let request_counter = meter.u64_counter("requests").init();
+        let response_counter = meter.u64_counter("responses").init();
 
         Self {
-            tracer,
-            meter,
             request_counter,
+            response_counter,
         }
     }
 }

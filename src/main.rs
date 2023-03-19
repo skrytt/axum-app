@@ -20,14 +20,16 @@ use axum::{
     routing::get,
     Router,
 };
+use opentelemetry::global;
 use std::{
   error::Error,
   net::SocketAddr,
-  time::Duration
+  time::Duration,
 };
+use tower::builder::ServiceBuilder;
 use tower_http::{
   classify::ServerErrorsFailureClass,
-  trace::TraceLayer
+  trace::TraceLayer,
 };
 use tracing::Span;
 
@@ -36,56 +38,54 @@ const APP_NAME: &str = "axum-app";
 
 #[tokio::main]
 async fn main() -> Result<(), Box<dyn Error + Send + Sync + 'static>> {
-  let _ = init_tracer();
-  init_metrics()?;
 
-  // TODO: instrument Metrics via a stateful middleware function.
+  init_tracer()?;
+
+  let _metrics_controller = init_metrics()?;
+  let _meter = global::meter(APP_NAME);
 
   let state = AppState::new();
 
   let app = Router::new()
     .route("/", get(handler))
-
-    .with_state(AppState::new())
-
     // TODO: find a clean way to lift this layer into `src/telemetry.rs`.
     // last I tried, struggled a bit with generic function signatures and closures.
     .layer(
-      TraceLayer::new_for_http()
-        .on_request(|request: &Request<_>, _span: &Span| {
-            tracing::debug!("Receved {} request", request.method());
-            tracing::debug!("{:?}", request);
-        })
-        .on_response(|response: &Response, latency: Duration, _span: &Span| {
-            tracing::debug!(
-                "Sending {} response (took {} us)",
-                response.status(),
-                latency.as_micros()
-            );
-            tracing::debug!("{:?}", response);
-        })
-        .on_body_chunk(|chunk: &Bytes, latency: Duration, _span: &Span| {
-            tracing::debug!(
-                "Response body produced a new chunk ({} bytes, took {} us)",
-                chunk.len(),
-                latency.as_micros()
-            );
-            tracing::debug!("{:?}", chunk);
-        })
-        .on_eos(
-            |_trailers: Option<&HeaderMap>, stream_duration: Duration, _span: &Span| {
+      ServiceBuilder::new()
+        .layer(
+          TraceLayer::new_for_http()
+            .on_request(|request: &Request<_>, _span: &Span| {
+                tracing::debug!("Receved {} request", request.method());
+            })
+            .on_response(|response: &Response, _latency: Duration, _span: &Span| {
                 tracing::debug!(
-                    "Streaming response body ended (took {} us)",
-                    stream_duration.as_micros()
+                    "Sending {} response",
+                    response.status(),
                 );
-            },
+                tracing::debug!("{:?}", response);
+            })
+            .on_body_chunk(|chunk: &Bytes, _latency: Duration, _span: &Span| {
+                tracing::debug!(
+                    "Response body produced a new chunk of {} bytes",
+                    chunk.len(),
+                );
+                tracing::debug!("{:?}", chunk);
+            })
+            .on_eos(
+                |_trailers: Option<&HeaderMap>, _stream_duration: Duration, _span: &Span| {
+                    tracing::debug!(
+                        "Streaming response body ended",
+                    );
+                },
+            )
+            .on_failure(
+                |error: ServerErrorsFailureClass, _latency: Duration, _span: &Span| {
+                    tracing::error!("Error: {}", error);
+                },
+            )
         )
-        .on_failure(
-            |error: ServerErrorsFailureClass, latency: Duration, _span: &Span| {
-                tracing::debug!("Error: {} (took {} us)", error, latency.as_micros());
-            },
-        ))
-    .layer(middleware::from_fn_with_state(state.clone(), metrics_middleware));
+        .layer(middleware::from_fn_with_state(state.clone(), metrics_middleware))
+    );
 
   let addr = SocketAddr::from(([127, 0, 0, 1], 3000));
   tracing::debug!("listening on {}", addr);
