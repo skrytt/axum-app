@@ -1,0 +1,21 @@
+[package]
+name = "axum-app"
+version = "0.1.0"
+edition = "2021"
+
+# See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
+
+[dependencies]
+async-trait = "0.1.66"
+axum = "0.6.11"
+const_format = "0.2.30"
+opentelemetry = { version = "0.18.0", features = ["metrics", "rt-tokio"] }
+opentelemetry-otlp = { version = "0.11.0", features = ["grpc-tonic", "metrics", "reqwest-client"] }
+opentelemetry-http = "0.7.0"
+reqwest = "0.11.14"
+tokio = { version = "1.26.0", features = ["macros", "rt-multi-thread"] }
+tonic = "0.8.1"
+tower-http = { version = "0.4.0", features = ["trace"] }
+tracing = "0.1.37"
+tracing-opentelemetry = "0.18.0"
+tracing-subscriber = { version ="0.3.16", features = ["env-filter"] }
