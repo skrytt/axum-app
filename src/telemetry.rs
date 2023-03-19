@@ -1,4 +1,12 @@
 use crate::APP_NAME;
+use crate::state::AppState;
+
+use axum::{
+  extract::State,
+  http::Request,
+  middleware::Next,
+  response::Response,
+};
 use const_format::formatcp;
 use opentelemetry::sdk::{
     export::metrics::aggregation::cumulative_temporality_selector,
@@ -55,4 +63,17 @@ pub fn init_metrics() -> metrics::Result<BasicController> {
         .with_period(Duration::from_secs(15))
         .with_timeout(Duration::from_secs(10))
         .build()
+}
+
+pub async fn metrics_middleware<B>(
+    State(state): State<AppState>,
+    request: Request<B>,
+    next: Next<B>,
+) -> Response {
+  // do something with `request`...
+
+  let response = next.run(request).await;
+  // do something with `response`...
+
+  response
 }

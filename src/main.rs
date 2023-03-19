@@ -6,12 +6,16 @@
 /// You can then configure the OpenTelemetry collector to send those onwards wherever
 /// you need (the OpenTelemetry configuration is out of scope of what's in this repo).
 
+mod state;
 mod telemetry;
-use telemetry::{init_metrics, init_tracer};
+
+use state::AppState;
+use telemetry::{init_metrics, init_tracer, metrics_middleware};
 
 use axum::{
     body::Bytes,
     http::{HeaderMap, Request},
+    middleware,
     response::{Html, Response},
     routing::get,
     Router,
@@ -41,13 +45,15 @@ async fn main() -> Result<(), Box<dyn Error + Send + Sync + 'static>> {
 
   // TODO: instrument Metrics via a stateful middleware function.
 
+  let state = AppState { /* ... */ };
+
   let app = Router::new()
     .route("/", get(handler))
 
     // TODO: find a clean way to lift this layer into `src/telemetry.rs`.
     // last I tried, struggled a bit with generic function signatures and closures.
     .layer(
-    TraceLayer::new_for_http()
+      TraceLayer::new_for_http()
         .on_request(|request: &Request<_>, _span: &Span| {
             tracing::debug!("Receved {} request", request.method());
             tracing::debug!("{:?}", request);
@@ -80,7 +86,8 @@ async fn main() -> Result<(), Box<dyn Error + Send + Sync + 'static>> {
             |error: ServerErrorsFailureClass, latency: Duration, _span: &Span| {
                 tracing::debug!("Error: {} (took {} us)", error, latency.as_micros());
             },
-        ));
+        ))
+    .layer(middleware::from_fn_with_state(state.clone(), metrics_middleware));
 
   let addr = SocketAddr::from(([127, 0, 0, 1], 3000));
   tracing::debug!("listening on {}", addr);
