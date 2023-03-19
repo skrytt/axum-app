@@ -14,7 +14,7 @@ use opentelemetry::sdk::{
     trace::{self, RandomIdGenerator, Sampler, Tracer},
     Resource,
 };
-use opentelemetry::{metrics, runtime, trace::TraceError, KeyValue};
+use opentelemetry::{Context, metrics, runtime, trace::TraceError, KeyValue};
 use opentelemetry_otlp::WithExportConfig;
 use std::time::Duration;
 
@@ -60,17 +60,18 @@ pub fn init_metrics() -> metrics::Result<BasicController> {
                 .tonic()
                 .with_endpoint(OTLP_GRPC_COLLECTOR_METRICS_ENDPOINT),
         )
-        .with_period(Duration::from_secs(15))
+        .with_period(Duration::from_secs(60))
         .with_timeout(Duration::from_secs(10))
         .build()
 }
 
 pub async fn metrics_middleware<B>(
-    State(state): State<AppState>,
+    State(mut state): State<AppState>,
     request: Request<B>,
     next: Next<B>,
 ) -> Response {
   // do something with `request`...
+  state.lock().request_counter.add(&Context::new(), 1, &[]);
 
   let response = next.run(request).await;
   // do something with `response`...

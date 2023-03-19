@@ -20,7 +20,6 @@ use axum::{
     routing::get,
     Router,
 };
-use opentelemetry::global;
 use std::{
   error::Error,
   net::SocketAddr,
@@ -40,15 +39,14 @@ async fn main() -> Result<(), Box<dyn Error + Send + Sync + 'static>> {
   let _ = init_tracer();
   init_metrics()?;
 
-  let _tracer = global::tracer(APP_NAME);
-  let _meter = global::meter(APP_NAME);
-
   // TODO: instrument Metrics via a stateful middleware function.
 
-  let state = AppState { /* ... */ };
+  let state = AppState::new();
 
   let app = Router::new()
     .route("/", get(handler))
+
+    .with_state(AppState::new())
 
     // TODO: find a clean way to lift this layer into `src/telemetry.rs`.
     // last I tried, struggled a bit with generic function signatures and closures.
